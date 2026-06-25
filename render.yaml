@@ -1,0 +1,28 @@
+services:
+  # ========== StockDApp 后端 API ==========
+  - type: web
+    name: stockdapp-api
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "3001"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "https://*.vercel.app,http://localhost:5173,http://localhost:5174"
+      # 合约配置（可选，虚拟余额模式下非必须）
+      - key: RPC_URL
+        value: "https://rpc.ankr.com/eth"
+      - key: USDT_ADDRESS
+        value: ""
+      - key: MARKET_ADDRESS
+        value: ""
+      - key: DEPLOYER_PRIVATE_KEY
+        value: ""

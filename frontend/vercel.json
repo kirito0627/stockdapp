@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://priest-dressed-essex-inch.trycloudflare.com/api/$1" }
+  ]
+}
