@@ -140,26 +140,32 @@ app.get('/api/market/kline', async (req, res) => {
   }
 });
 
-// 静态文件服务（前端 — 供本地和隧道使用）
-app.use(express.static(join(__dirname, '..', 'public')));
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api/')) return next();
-  res.sendFile('index.html', { root: join(__dirname, '..', 'public') });
-});
+// 静态文件服务（前端 — 仅本地/public 目录存在时启用）
+import { existsSync } from 'fs';
+const publicPath = join(__dirname, '..', 'public');
+if (existsSync(join(publicPath, 'index.html'))) {
+  app.use(express.static(publicPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile('index.html', { root: publicPath });
+  });
+}
 
-// 启动服务
+// 启动服务（不等待合约初始化，立即监听端口）
 async function start() {
-  // 初始化数据库
   initDB();
 
-  // 初始化合约连接（异步，等待完成后再启动服务）
-  await initContracts();
-
+  // 立即启动服务，合约初始化在后台进行
   app.listen(PORT, () => {
     console.log(`\n========================================`);
     console.log(`  StockDApp backend running on http://localhost:${PORT}`);
     console.log(`  Health check: http://localhost:${PORT}/api/health`);
     console.log(`========================================\n`);
+  });
+
+  // 后台初始化合约（不阻塞服务启动）
+  initContracts().catch(err => {
+    console.warn('Contracts init failed (non-critical):', err.message);
   });
 }
 
