@@ -301,6 +301,16 @@ body {
 .trade-section { background: #0f0f1a; border-radius: 10px; padding: 16px; border: 1px solid #2a2a3e; }
 .trade-section h3 { font-size: 15px; margin-bottom: 12px; }
 .est-hint { font-size: 11px; color: #555; margin-top: 4px; }
+.position-select { width: 100%; padding: 10px 12px; border: 1px solid #2a2a3e; border-radius: 8px; font-size: 13px; background: #0f0f1a; color: #e0e0e0; outline: none; }
+.position-select:focus { border-color: #e74c3c; }
+.position-info { background: #1a1a2e; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; border: 1px solid #2a2a3e; }
+.pi-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; color: #888; }
+.pi-row:last-child { margin-bottom: 0; }
+.pi-row strong { color: #e0e0e0; font-weight: 600; }
+.input-with-max { display: flex; gap: 8px; align-items: center; }
+.input-with-max input { flex: 1; }
+.max-btn { padding: 10px 12px; border: 1px solid #2a2a3e; border-radius: 8px; background: #1a1a2e; color: #e74c3c; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.max-btn:hover { background: #e74c3c; color: #fff; border-color: #e74c3c; }
 
 /* ========== 持仓 ========== */
 .position-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
