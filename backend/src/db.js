@@ -1,66 +1,84 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
+import pg from 'pg';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '..', 'data', 'stockdapp.db');
+const { Pool } = pg;
 
-let db;
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://localhost:5432/stockdapp';
 
-export function initDB() {
-  // 确保目录存在（同步）
-  const dir = path.dirname(DB_PATH);
-  fs.mkdirSync(dir, { recursive: true });
+let pool;
 
-  db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
+export async function initDB() {
+  pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  });
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      wallet_address TEXT NOT NULL,
-      encrypted_private_key TEXT NOT NULL,
-      virtual_balance TEXT NOT NULL DEFAULT '0',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS positions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      stock_code TEXT NOT NULL,
-      shares TEXT NOT NULL DEFAULT '0',
-      cost_basis TEXT NOT NULL DEFAULT '0',
-      UNIQUE(user_id, stock_code),
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS trades (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      stock_code TEXT NOT NULL,
-      stock_name TEXT NOT NULL DEFAULT '',
-      is_buy INTEGER NOT NULL,
-      price TEXT NOT NULL,
-      shares TEXT NOT NULL,
-      amount TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    );
-  `);
-
-  // 兼容旧表：添加 virtual_balance 列（如果不存在）
+  // 测试连接并初始化表
+  const client = await pool.connect();
   try {
-    db.exec(`ALTER TABLE users ADD COLUMN virtual_balance TEXT NOT NULL DEFAULT '0'`);
-  } catch (e) {
-    // 列已存在，忽略
-  }
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        wallet_address TEXT NOT NULL,
+        encrypted_private_key TEXT NOT NULL,
+        virtual_balance TEXT NOT NULL DEFAULT '0',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
 
-  console.log('Database initialized at', DB_PATH);
+      CREATE TABLE IF NOT EXISTS positions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        stock_code TEXT NOT NULL,
+        shares TEXT NOT NULL DEFAULT '0',
+        cost_basis TEXT NOT NULL DEFAULT '0',
+        UNIQUE(user_id, stock_code)
+      );
+
+      CREATE TABLE IF NOT EXISTS trades (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        stock_code TEXT NOT NULL,
+        stock_name TEXT NOT NULL DEFAULT '',
+        is_buy INTEGER NOT NULL,
+        price TEXT NOT NULL,
+        shares TEXT NOT NULL,
+        amount TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 兼容旧表：确保 virtual_balance 列存在
+    try {
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS virtual_balance TEXT NOT NULL DEFAULT '0'`);
+    } catch (e) {
+      console.warn('Add column warning:', e.message);
+    }
+
+    console.log('PostgreSQL database initialized');
+  } finally {
+    client.release();
+  }
 }
 
 export function getDB() {
-  return db;
+  if (!pool) throw new Error('Database not initialized. Call initDB() first.');
+  return pool;
+}
+
+// 辅助函数：执行单条查询返回一个结果
+export async function queryOne(sql, params) {
+  const result = await pool.query(sql, params);
+  return result.rows[0] || null;
+}
+
+// 辅助函数：执行查询返回数组
+export async function queryMany(sql, params) {
+  const result = await pool.query(sql, params);
+  return result.rows;
+}
+
+// 辅助函数：执行写入操作
+export async function run(sql, params) {
+  return await pool.query(sql, params);
 }
