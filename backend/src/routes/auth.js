@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { ethers } from 'ethers';
-import { getDB } from '../db.js';
-import { createUserWallet, getMarket, getUSDT, getUserWallet, getMarketForUser, getUSDTForUser, decryptPrivateKey } from '../contracts.js';
+import { getDB, queryOne, run } from '../db.js';
+import { createUserWallet } from '../contracts.js';
 import { generateToken, authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
@@ -25,7 +25,7 @@ router.post('/register', async (req, res) => {
     const db = getDB();
 
     // 检查用户名是否已存在
-    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+    const existing = await queryOne('SELECT id FROM users WHERE username = $1', [username]);
     if (existing) {
       return res.status(409).json({ error: '用户名已存在' });
     }
@@ -37,18 +37,20 @@ router.post('/register', async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
 
     // 存入数据库（含 1,000,000 虚拟余额）
-    const result = db.prepare(`
-      INSERT INTO users (username, password_hash, wallet_address, encrypted_private_key, virtual_balance)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(username, passwordHash, walletInfo.address, walletInfo.encryptedPrivateKey, '1000000');
+    const result = await db.query(
+      `INSERT INTO users (username, password_hash, wallet_address, encrypted_private_key, virtual_balance)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [username, passwordHash, walletInfo.address, walletInfo.encryptedPrivateKey, '1000000']
+    );
 
-    const token = generateToken(result.lastInsertRowid, username);
+    const userId = result.rows[0].id;
+    const token = generateToken(userId, username);
 
     res.json({
       success: true,
       token,
       user: {
-        id: result.lastInsertRowid,
+        id: userId,
         username,
         walletAddress: walletInfo.address,
       },
@@ -68,8 +70,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: '用户名和密码不能为空' });
     }
 
-    const db = getDB();
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+    const user = await queryOne('SELECT * FROM users WHERE username = $1', [username]);
 
     if (!user || !bcrypt.compareSync(password, user.password_hash)) {
       return res.status(401).json({ error: '用户名或密码错误' });
@@ -94,18 +95,22 @@ router.post('/login', async (req, res) => {
 
 // ============ 获取当前用户信息 ============
 router.get('/me', authMiddleware, async (req, res) => {
-  const db = getDB();
-  const user = db.prepare('SELECT id, username, wallet_address FROM users WHERE id = ?').get(req.userId);
+  try {
+    const user = await queryOne('SELECT id, username, wallet_address FROM users WHERE id = $1', [req.userId]);
 
-  if (!user) {
-    return res.status(404).json({ error: '用户不存在' });
+    if (!user) {
+      return res.status(404).json({ error: '用户不存在' });
+    }
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      walletAddress: user.wallet_address,
+    });
+  } catch (e) {
+    console.error('获取用户信息失败:', e);
+    res.status(500).json({ error: '获取用户信息失败' });
   }
-
-  res.json({
-    id: user.id,
-    username: user.username,
-    walletAddress: user.wallet_address,
-  });
 });
 
 export default router;
