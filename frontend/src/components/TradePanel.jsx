@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -12,6 +12,20 @@ export default function TradePanel({ token, chainStocks, realTimePrices, chainBa
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [positions, setPositions] = useState([]);
+
+  // 加载持仓
+  useEffect(() => {
+    if (!token) return;
+    fetch(`${API_BASE}/account/positions`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(r => r.json())
+      .then(data => {
+        setPositions(data?.positions || []);
+      })
+      .catch(() => setPositions([]));
+  }, [token, loading, status]);
 
   const filteredStocks = chainStocks.filter(s => {
     if (!searchQuery) return true;
@@ -22,6 +36,7 @@ export default function TradePanel({ token, chainStocks, realTimePrices, chainBa
   const handleSelect = (code) => {
     setSelectedStock(code);
     setSearchQuery('');
+    setSellShares('');
   };
 
   const selected = chainStocks.find(s => s.code === selectedStock);
@@ -39,6 +54,15 @@ export default function TradePanel({ token, chainStocks, realTimePrices, chainBa
   const turnover = rt?.turnover || 0;
 
   const tradePrice = livePrice > 0 ? livePrice : chainPrice;
+
+  // 当前选中股票的持仓
+  const selectedPosition = positions.find(p => p.code === selectedStock);
+  const maxSellShares = selectedPosition ? selectedPosition.shares : 0;
+  const avgCost = selectedPosition ? selectedPosition.costBasis : 0;
+  const positionProfit = selectedPosition && tradePrice > 0
+    ? (tradePrice - avgCost) * selectedPosition.shares
+    : 0;
+  const positionProfitPct = avgCost > 0 ? ((tradePrice - avgCost) / avgCost) * 100 : 0;
 
   async function handleBuy() {
     if (!buyAmount || !selectedStock) return;
@@ -225,16 +249,70 @@ export default function TradePanel({ token, chainStocks, realTimePrices, chainBa
               ¥{tradePrice.toFixed(2)}
             </span>
           </p>
+
+          {/* 持仓选择器 */}
+          <div className="form-group">
+            <label>选择持仓</label>
+            <select
+              className="position-select"
+              value={selectedStock}
+              onChange={e => handleSelect(e.target.value)}
+            >
+              <option value="">-- 选择要卖出的股票 --</option>
+              {positions.length === 0 && (
+                <option value="" disabled>暂无持仓</option>
+              )}
+              {positions.map(p => {
+                const rt = realTimePrices[p.code] || {};
+                const price = rt.price || 0;
+                const profit = price > 0 ? (price - p.costBasis) * p.shares : 0;
+                const profitPct = p.costBasis > 0 && price > 0 ? ((price - p.costBasis) / p.costBasis) * 100 : 0;
+                const isUp = profit >= 0;
+                return (
+                  <option key={p.code} value={p.code}>
+                    {p.code} - 持有 {p.shares} 股 | 成本 ¥{p.costBasis.toFixed(2)} | 现价 ¥{price.toFixed(2)} | 盈亏 {isUp ? '+' : ''}{profit.toFixed(2)} ({isUp ? '+' : ''}{profitPct.toFixed(2)}%)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {selectedPosition && (
+            <div className="position-info">
+              <div className="pi-row">
+                <span>持仓:</span>
+                <strong>{selectedPosition.shares} 股</strong>
+              </div>
+              <div className="pi-row">
+                <span>成本价:</span>
+                <strong>¥{avgCost.toFixed(2)}</strong>
+              </div>
+              <div className="pi-row">
+                <span>盈亏:</span>
+                <strong style={{ color: positionProfit >= 0 ? '#e74c3c' : '#27ae60' }}>
+                  {positionProfit >= 0 ? '+' : ''}{positionProfit.toFixed(2)} ({positionProfitPct >= 0 ? '+' : ''}{positionProfitPct.toFixed(2)}%)
+                </strong>
+              </div>
+            </div>
+          )}
+
           <div className="form-group">
             <label>卖出数量 (股)</label>
-            <input type="number" value={sellShares} onChange={e => setSellShares(e.target.value)}
-              placeholder="输入股数" step="any" />
+            <div className="input-with-max">
+              <input type="number" value={sellShares} onChange={e => setSellShares(e.target.value)}
+                placeholder="输入股数" step="any" max={maxSellShares} />
+              {selectedPosition && (
+                <button className="max-btn" onClick={() => setSellShares(String(maxSellShares))}>
+                  全部
+                </button>
+              )}
+            </div>
             {sellShares && tradePrice > 0 && (
               <div className="est-hint">≈ 约 ¥<strong>{estimatedValue}</strong></div>
             )}
           </div>
           <button className="btn btn-sell" onClick={handleSell}
-            disabled={loading || !sellShares || !selectedStock}>
+            disabled={loading || !sellShares || !selectedStock || Number(sellShares) > maxSellShares}>
             {loading ? '处理中...' : '按实时价卖出'}
           </button>
         </div>
