@@ -268,9 +268,10 @@ export default function TradePanel({ token, chainStocks, realTimePrices, chainBa
                 const profit = price > 0 ? (price - p.costBasis) * p.shares : 0;
                 const profitPct = p.costBasis > 0 && price > 0 ? ((price - p.costBasis) / p.costBasis) * 100 : 0;
                 const isUp = profit >= 0;
+                const stockName = chainStocks.find(s => s.code === p.code)?.name || '';
                 return (
                   <option key={p.code} value={p.code}>
-                    {p.code} - 持有 {p.shares} 股 | 成本 ¥{p.costBasis.toFixed(2)} | 现价 ¥{price.toFixed(2)} | 盈亏 {isUp ? '+' : ''}{profit.toFixed(2)} ({isUp ? '+' : ''}{profitPct.toFixed(2)}%)
+                    {stockName ? `${stockName} (${p.code})` : p.code} - 持有 {p.shares} 股 | 成本 ¥{p.costBasis.toFixed(2)} | 现价 ¥{price.toFixed(2)} | 盈亏 {isUp ? '+' : ''}{profit.toFixed(2)} ({isUp ? '+' : ''}{profitPct.toFixed(2)}%)
                   </option>
                 );
               })}
