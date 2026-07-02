@@ -153,7 +153,7 @@ if (existsSync(join(publicPath, 'index.html'))) {
 
 // 启动服务（不等待合约初始化，立即监听端口）
 async function start() {
-  initDB();
+  await initDB();
 
   // 立即启动服务，合约初始化在后台进行
   app.listen(PORT, () => {
