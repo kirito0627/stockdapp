@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { getDB } from '../db.js';
+import { queryOne, queryMany } from '../db.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -13,8 +13,7 @@ const router = Router();
 // ============ 获取账户余额 ============
 router.get('/balance', authMiddleware, async (req, res) => {
   try {
-    const db = getDB();
-    const user = db.prepare('SELECT id, username, wallet_address, virtual_balance FROM users WHERE id = ?').get(req.userId);
+    const user = await queryOne('SELECT id, username, wallet_address, virtual_balance FROM users WHERE id = $1', [req.userId]);
     if (!user) return res.status(404).json({ error: '用户不存在' });
 
     res.json({
@@ -31,11 +30,10 @@ router.get('/balance', authMiddleware, async (req, res) => {
 // ============ 获取持仓 ============
 router.get('/positions', authMiddleware, async (req, res) => {
   try {
-    const db = getDB();
-    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.userId);
+    const user = await queryOne('SELECT id FROM users WHERE id = $1', [req.userId]);
     if (!user) return res.status(404).json({ error: '用户不存在' });
 
-    const rows = db.prepare('SELECT * FROM positions WHERE user_id = ?').all(req.userId);
+    const rows = await queryMany('SELECT * FROM positions WHERE user_id = $1', [req.userId]);
 
     const positions = rows.map(r => {
       const shares = Number(r.shares);
@@ -61,13 +59,13 @@ router.get('/positions', authMiddleware, async (req, res) => {
 // ============ 获取交易记录 ============
 router.get('/trades', authMiddleware, async (req, res) => {
   try {
-    const db = getDB();
-    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.userId);
+    const user = await queryOne('SELECT id FROM users WHERE id = $1', [req.userId]);
     if (!user) return res.status(404).json({ error: '用户不存在' });
 
-    const rows = db.prepare(`
-      SELECT * FROM trades WHERE user_id = ? ORDER BY created_at DESC LIMIT 50
-    `).all(req.userId);
+    const rows = await queryMany(
+      'SELECT * FROM trades WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
+      [req.userId]
+    );
 
     const trades = rows.map(r => ({
       code: r.stock_code,
